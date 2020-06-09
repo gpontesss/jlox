@@ -70,6 +70,14 @@ public class Scanner {
             case '/':
                 if (match('/')) {
                     while(peek() != '\n' && !isAtEnd()) advance();
+                } else if (match('*')) {
+                    while(!(peek() == '*' && peekNext() == '/') && !isAtEnd()) {
+                        c = advance();
+                        if (c == '\n') line++;
+                    }
+                    if (isAtEnd())
+                        Lox.error(line, "Unexpected EOF");
+                    current += 2; // Consume last '*/' characters
                 } else {
                     addToken(TokenType.SLASH);
                 }
