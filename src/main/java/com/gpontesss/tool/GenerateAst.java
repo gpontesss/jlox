@@ -48,7 +48,7 @@ public class GenerateAst {
         String[] fields = type.split(":")[1].trim().split(", ");
 
         writer.println();
-        writer.println(indent+"static class "+className+" {");
+        writer.println(indent+"static class "+className+" extends "+baseName+" {");
 
         defineFields(writer, indent+indent, fields);
         writer.println();
