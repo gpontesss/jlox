@@ -6,27 +6,6 @@ import java.util.List;
 public class Parser {
 
     private static class ParseError extends RuntimeException {}
-    public static void main(String[] args) {
-        Scanner scanner = new Scanner("(2 - 2) * 5 * 3");
-        List<Token> tokens = scanner.scanTokens();
-        if (Lox.hadError) {
-            System.exit(1);
-        }
-
-        for (Token token: tokens) {
-            System.out.println(token);
-        }
-
-        Parser parser = new Parser(tokens);
-        Expr expr = parser.expression();
-
-        List<String> errors = parser.getErrors();
-        if (errors.size() > 0) {
-            System.err.println(errors);
-            System.exit(64);
-        }
-        System.out.println(new AstPrinter().print(expr));
-    }
 
     private final List<Token> tokens;
     private List<String> errors = new ArrayList<>();
@@ -40,7 +19,15 @@ public class Parser {
         return errors;
     }
 
-    public Expr expression() {
+    public Expr parse() {
+        try {
+            return expression();
+        } catch(ParseError error) {
+            return null;
+        }
+    }
+
+    private Expr expression() {
         return equality();
     }
 
@@ -102,10 +89,11 @@ public class Parser {
 
     private Expr primary() {
         Token token = advance();
-        if (token == null || token.type == TokenType.EOF) {
-            errors.add("Unexpected EOF");
-            return null;
+
+        if (token == null) {
+            throw error(token, "Unexpected");
         }
+
         switch (token.type) {
             case NUMBER:
             case STRING:
@@ -140,7 +128,7 @@ public class Parser {
     }
 
     private Token advance() {
-        if (istAtEnd()) return tokens.get(current);
+        if (istAtEnd()) return null;
         current++;
         return tokens.get(current-1);
     }
