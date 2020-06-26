@@ -6,8 +6,12 @@ import java.util.List;
 public class Parser {
 
     public static void main(String[] args) {
-        Scanner scanner = new Scanner("2 - (2 * 5 * 3)");
+        Scanner scanner = new Scanner("(2 - 2) * 5 * 3");
         List<Token> tokens = scanner.scanTokens();
+        if (Lox.hadError) {
+            System.exit(1);
+        }
+
         for (Token token: tokens) {
             System.out.println(token);
         }
@@ -41,67 +45,49 @@ public class Parser {
 
     private Expr equality() {
         Expr left = comparison();
-        Token operator = peek();
-        // if (operator == null || operator.type == TokenType.EOF)
-        //      return left;
-        if (operator != null && (operator.type == TokenType.BANG_EQUAL || operator.type == TokenType.EQUAL_EQUAL)) {
-            advance();
+
+        while(match(TokenType.BANG_EQUAL, TokenType.EQUAL_EQUAL)) {
+            Token operator = advance();
             Expr right = comparison();
-            return new Expr.Binary(left, operator, right);
+            left = new Expr.Binary(left, operator, right);
         }
+
         return left;
-        // errors.add("Expected equality token, got "+operator.lexeme);
-        // return null;
     }
 
     private Expr comparison() {
         Expr left = addition();
-        Token operator = peek();
-        // if (operator == null || operator.type == TokenType.EOF)
-        //     return left;
-        if (operator != null &&
-        (operator.type == TokenType.LESS ||
-        operator.type == TokenType.GREATER ||
-        operator.type == TokenType.LESS_EQUAL ||
-        operator.type == TokenType.GREATER_EQUAL)) {
-            advance();
-            Expr right = addition();
-            return new Expr.Binary(left, operator, right);
+        while(match(
+            TokenType.LESS,
+            TokenType.GREATER,
+            TokenType.LESS_EQUAL,
+            TokenType.GREATER_EQUAL
+        )) {
+            Token operator = advance();
+            Expr right = comparison();
+            left = new Expr.Binary(left, operator, right);
         }
         return left;
-        // errors.add("Expected comparison token, got "+operator.lexeme);
-        // return null;
     }
 
     private Expr addition() {
         Expr left = multiplication();
-        Token operator = peek();
-        // if (operator == null || operator.type == TokenType.EOF)
-        //     return left;
-        // advance();
-        if (operator != null && (operator.type == TokenType.MINUS || operator.type == TokenType.PLUS)) {
-            advance();
+        while(match(TokenType.MINUS, TokenType.PLUS)) {
+            Token operator = advance();
             Expr right = multiplication();
-            return new Expr.Binary(left, operator, right);
+            left = new Expr.Binary(left, operator, right);
         }
         return left;
-        // errors.add("Expected addition token, got "+operator.lexeme);
-        // return null;
     }
 
     private Expr multiplication() {
         Expr left = unary();
-        Token operator = peek();
-        // if (operator == null || operator.type == TokenType.EOF)
-        //     return left;
-        if (operator != null && (operator.type == TokenType.STAR || operator.type == TokenType.SLASH)) {
-            advance();
+        while(match(TokenType.STAR, TokenType.SLASH)) {
+            Token operator = advance();
             Expr right = unary();
-            return new Expr.Binary(left, operator, right);
+            left = new Expr.Binary(left, operator, right);
         }
         return left;
-        // errors.add("Expected multiplication token, got "+operator.lexeme);
-        // return null;
     }
 
     private Expr unary() {
@@ -116,8 +102,10 @@ public class Parser {
 
     private Expr primary() {
         Token token = advance();
-        if (token == null || token.type == TokenType.EOF)
+        if (token == null || token.type == TokenType.EOF) {
+            errors.add("Unexpected EOF");
             return null;
+        }
         switch (token.type) {
             case NUMBER:
             case STRING:
@@ -129,22 +117,40 @@ public class Parser {
             case NIL:
             return new Expr.Literal(null);
             case LEFT_PAREN:
-                Expr expr = expression();
-                Token nextToken = peek();
-                if (nextToken == null || nextToken.type == TokenType.EOF) {
-                    errors.add("Unexpected EOF");
-                    return null;
-                }
-                if (nextToken.type != TokenType.RIGHT_PAREN) {
-                    errors.add("Expected ')' token, got "+nextToken.lexeme);
-                    return null;
-                }
-                advance();
-                return new Expr.Grouping(expr);
+            return group();
             default:
             errors.add("Unexpected "+token.lexeme+" token");
             return null;
         }
+    }
+
+    private Expr group() {
+        Expr expr = expression();
+        Token nextToken = peek();
+        if (nextToken == null || nextToken.type == TokenType.EOF) {
+            errors.add("Unexpected EOF");
+            return null;
+        }
+        if (nextToken.type != TokenType.RIGHT_PAREN) {
+            errors.add("Expected ')' token, got "+nextToken.lexeme);
+            return null;
+        }
+        advance();
+        return new Expr.Grouping(expr);
+    }
+
+    private boolean match(TokenType ...types) {
+        if (istAtEnd())
+            return false;
+        for (TokenType type : types) {
+            if (peek().type == type)
+                return true;
+        }
+        return false;
+    }
+
+    private boolean istAtEnd() {
+        return current >= tokens.size() || peek().type == TokenType.EOF;
     }
 
     private Token advance() {
