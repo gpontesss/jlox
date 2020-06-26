@@ -5,6 +5,7 @@ import java.util.List;
 
 public class Parser {
 
+    private static class ParseError extends RuntimeException {}
     public static void main(String[] args) {
         Scanner scanner = new Scanner("(2 - 2) * 5 * 3");
         List<Token> tokens = scanner.scanTokens();
@@ -47,7 +48,7 @@ public class Parser {
         Expr left = comparison();
 
         while(match(TokenType.BANG_EQUAL, TokenType.EQUAL_EQUAL)) {
-            Token operator = advance();
+            Token operator = previous();
             Expr right = comparison();
             left = new Expr.Binary(left, operator, right);
         }
@@ -63,7 +64,7 @@ public class Parser {
             TokenType.LESS_EQUAL,
             TokenType.GREATER_EQUAL
         )) {
-            Token operator = advance();
+            Token operator = previous();
             Expr right = comparison();
             left = new Expr.Binary(left, operator, right);
         }
@@ -73,7 +74,7 @@ public class Parser {
     private Expr addition() {
         Expr left = multiplication();
         while(match(TokenType.MINUS, TokenType.PLUS)) {
-            Token operator = advance();
+            Token operator = previous();
             Expr right = multiplication();
             left = new Expr.Binary(left, operator, right);
         }
@@ -83,7 +84,7 @@ public class Parser {
     private Expr multiplication() {
         Expr left = unary();
         while(match(TokenType.STAR, TokenType.SLASH)) {
-            Token operator = advance();
+            Token operator = previous();
             Expr right = unary();
             left = new Expr.Binary(left, operator, right);
         }
@@ -91,11 +92,10 @@ public class Parser {
     }
 
     private Expr unary() {
-        Token token = peek();
-        if (token != null && (token.type == TokenType.BANG || token.type == TokenType.MINUS)) {
-            advance();
+        if (match(TokenType.BANG,  TokenType.MINUS)) {
+            Token operator = previous();
             Expr right = unary();
-            return new Expr.Unary(token, right);
+            return new Expr.Unary(operator, right);
         }
         return primary();
     }
@@ -117,34 +117,20 @@ public class Parser {
             case NIL:
             return new Expr.Literal(null);
             case LEFT_PAREN:
-            return group();
+            Expr expr = expression();
+            consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
+            return new Expr.Grouping(expr);
             default:
-            errors.add("Unexpected "+token.lexeme+" token");
-            return null;
+            throw error(peek(), "Expected expression");
         }
-    }
-
-    private Expr group() {
-        Expr expr = expression();
-        Token nextToken = peek();
-        if (nextToken == null || nextToken.type == TokenType.EOF) {
-            errors.add("Unexpected EOF");
-            return null;
-        }
-        if (nextToken.type != TokenType.RIGHT_PAREN) {
-            errors.add("Expected ')' token, got "+nextToken.lexeme);
-            return null;
-        }
-        advance();
-        return new Expr.Grouping(expr);
     }
 
     private boolean match(TokenType ...types) {
-        if (istAtEnd())
-            return false;
         for (TokenType type : types) {
-            if (peek().type == type)
+            if (check(type)) {
+                advance();
                 return true;
+            }
         }
         return false;
     }
@@ -154,7 +140,7 @@ public class Parser {
     }
 
     private Token advance() {
-        if (current >= tokens.size()) return null;
+        if (istAtEnd()) return tokens.get(current);
         current++;
         return tokens.get(current-1);
     }
@@ -162,5 +148,48 @@ public class Parser {
     private Token peek() {
         if (current >= tokens.size()) return null;
         return tokens.get(current);
+    }
+
+    private boolean check(TokenType type) {
+        if (istAtEnd()) return false;
+        return peek().type == type;
+    }
+
+    private Token previous() {
+        return tokens.get(current-1);
+    }
+
+    private Token consume(TokenType type, String message) {
+        if(check(type)) return advance();
+
+        throw error(peek(), message);
+    }
+
+    private ParseError error(Token token, String message) {
+        Lox.error(token, message);
+        return new ParseError();
+    }
+
+    private void synchronize() {
+        advance();
+
+        while(!istAtEnd()) {
+            if (previous().type == TokenType.SEMICOLON) return;
+
+            switch(peek().type) {
+                case CLASS:
+                case IF:
+                case FOR:
+                case FUN:
+                case VAR:
+                case WHILE:
+                case PRINT:
+                    return;
+                default:
+                    break;
+            }
+
+            advance();
+        }
     }
 }
